@@ -8,9 +8,7 @@ def main(path, device_pref, solver, fixed_seq_len, ahead, tail, device_ind):
     instances = get_num_instances(path)
     seq_len_cache = get_training_lens(path, instances, solver, fixed_seq_len)
     file_cache = get_training_paths(path, instances, seq_len_cache, solver)
-    
-    print_diagnostics(seq_len_cache, file_cache)
-    
+        
     device = set_device(device_pref, device_ind)
     
     train_set, valid_set = train_test_split(seq_len_cache)
@@ -31,7 +29,7 @@ def set_device(device_pref, device_ind):
     device = None
     
     if device_pref == 'cuda' and torch.cuda.is_available():
-        device = torch.device(f'cuda:{device_ind}')
+        device = torch.device(f'cuda:{device_ind}') if device_ind is not None else torch.device(f'cuda')
         print('Now using GPU.')
     else:
         device = torch.device('cpu')

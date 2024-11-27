@@ -4,16 +4,18 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 from torch import nn
+import random
+import torch.nn.functional as F
 
 
-def main(x_train_data, y_train_data, x_valid_data, y_valid_data, device, batch_size):
-    train_dataset = collidingBubbles(x_train_data, y_train_data, device, load_instances, preprocess)
-    valid_dataset = collidingBubbles(x_valid_data, y_valid_data,  device, load_instances, preprocess)
+def main(x_train_data, y_train_data, x_valid_data, y_valid_data, batch_size, tworkers=32, vworkers=32, aug=True):
+    train_dataset = collidingBubbles(x_train_data, y_train_data, load_instances, preprocess, aug_pipeline if aug else None, channel_select=[3])
+    valid_dataset = collidingBubbles(x_valid_data, y_valid_data, load_instances, preprocess, channel_select=[3])
     
     train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, 
-                      num_workers=32, drop_last=True, pin_memory=True)
+                      num_workers=tworkers, drop_last=True, pin_memory=True)
     valid_dl = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True, 
-                      num_workers=32, drop_last=True, pin_memory=True)
+                      num_workers=vworkers, drop_last=True, pin_memory=True)
     
     return train_dl, valid_dl
 
@@ -123,12 +125,11 @@ def preprocess(input_tensor, target_tensor):
 
 
 class collidingBubbles(Dataset):
-    def __init__(self, x, y, device, loading_func, preprocess_func, data_aug=None, channel_select=None):
-        self.device = device
+    def __init__(self, x, y, loading_func, preprocess_func, data_aug=None, channel_select=None):
         self.x, self.y = x, y
         self.loading_func = loading_func
         self.preprocess_func = preprocess_func
-        self.channel_selection = channel_select
+        self.channel_select = channel_select
         self.data_aug = data_aug
 
     def __len__(self):
@@ -137,13 +138,21 @@ class collidingBubbles(Dataset):
     def __getitem__(self, idx):
         x_instance, y_instance = self.x[idx], self.y[idx]
                 
-        inpt, target = self.loading_func(x_instance, seq_len=1, channel_select=[1, 2, 3]), self.loading_func(y_instance, seq_len=1, channel_select=[1, 2, 3])
+        inpt =  self.loading_func(x_instance, seq_len=1, channel_select=self.channel_select) 
+        target = self.loading_func(y_instance, seq_len=1, channel_select=self.channel_select)
         inpt, target = self.preprocess_func(inpt, target)
         
+        if inpt.shape[0] == 1:
+            inpt, target = inpt.repeat(3, 1, 1), target.repeat(3, 1, 1)
+        
         if self.data_aug is not None:
+            if False:
+                inpt_aug = self.data_aug(inpt)
+                return inpt_aug, target
+            
             t = self.data_aug(torch.cat([inpt, target], axis=0))
             inpt_aug, target_aug = t[:3, :, :], t[3:, :, :]
-
-            return inpt, target, inpt_aug, target_aug
+            
+            return inpt_aug, target_aug
         
         return inpt, target
